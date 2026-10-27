@@ -1,0 +1,33 @@
+From: ZZT for Android maintainers
+Subject: Preserve the Pascal I/O error before formatting it
+
+Apply to asiekierka/reconstruction-of-zzt SRC/GAME.PAS.
+
+The bundled ZZT.EXE is the upstream prebuilt executable. This source correction
+is kept here for a future rebuild of that executable; the Android APK build
+does not compile the Turbo Pascal source.
+
+diff --git a/SRC/GAME.PAS b/SRC/GAME.PAS
+--- a/SRC/GAME.PAS
++++ b/SRC/GAME.PAS
+@@ -649,15 +649,17 @@
+ 	var
++		ioError: integer;
+ 		errorNumStr: TString50;
+ 		textWindow: TTextWindowState;
+ 	begin
+-		if IOResult = 0 then begin
++		ioError := IOResult;
++		if ioError = 0 then begin
+ 			DisplayIOError := false;
+ 			exit;
+ 		end;
+ 
+ 		DisplayIOError := true;
+ 
+-		Str(IOResult, textWindow.Title);
+-		textWindow.Title := 'Error # ' + textWindow.Title;
++		Str(ioError, errorNumStr);
++		textWindow.Title := 'Error # ' + errorNumStr;
+ 		TextWindowInitState(textWindow);
+ 		TextWindowAppend(textWindow, '$DOS Error: ');

@@ -25,8 +25,10 @@
     #dpad-center { grid-area: 2 / 2; border: 1px solid #5555ff; background: #0000aa; color: #fff; font-size: clamp(10px, 2.4vh, 14px); letter-spacing: -1px; }
     #right svg { transform: rotate(90deg); } #down svg { transform: rotate(180deg); } #left svg { transform: rotate(270deg); }
     #up { grid-area: 1 / 2; border-radius: 10px 10px 0 0; } #left { grid-area: 2 / 1; border-radius: 10px 0 0 10px; } #right { grid-area: 2 / 3; border-radius: 0 10px 10px 0; } #down { grid-area: 3 / 2; border-radius: 0 0 10px 10px; }
-    .action-grid { position: absolute; top: 5%; left: 0; right: 0; width: 100%; max-width: 245px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 6px; }
+    .action-grid { position: absolute; top: 5%; left: 0; right: 0; width: 100%; max-width: 245px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) 42px; gap: 6px; }
     .action-grid button { min-width: 0; padding: 6px 3px; font-size: clamp(10px, 1.6vw, 13px); white-space: nowrap; }
+    #world-folder { width: 42px; min-width: 42px; padding: 4px; display: grid; place-items: center; }
+    #world-folder svg { width: 22px; height: 22px; fill: currentColor; }
     #torch-zone { position: absolute; bottom: calc(5% + var(--dpad-height) + 12px); left: 0; right: 0; width: 100%; max-width: 245px; margin: 0 auto; }
     #torch-zone button { width: 100%; }
     #fire-zone { position: absolute; bottom: 5%; left: 0; right: 0; width: 100%; max-width: 245px; margin: 0 auto; }
@@ -61,7 +63,8 @@
       <section class="side" aria-label="ZZT controls">
         <div class="action-grid">
           <button data-tap="p" aria-label="Start the game">PLAY</button>
-          <button id="load-world" type="button" aria-label="Choose a ZZT world file">LOAD WORLD</button>
+          <button id="world" data-tap="w" aria-label="Open ZZT world selection">WORLD</button>
+          <button id="world-folder" type="button" aria-label="Set worlds folder" title="Set worlds folder"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94a7.94 7.94 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.3 7.3 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.88 2h-3.76a.49.49 0 0 0-.49.42l-.36 2.54c-.59.23-1.14.55-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.72 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.94 7.94 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .61.22l2.39-.96c.49.39 1.04.71 1.63.94l.36 2.54a.49.49 0 0 0 .49.42h3.76a.49.49 0 0 0 .49-.42l.36-2.54c.59-.23 1.14-.55 1.63-.94l2.39.96a.5.5 0 0 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg></button>
         </div>
         <div id="torch-zone">
           <button data-tap="t" aria-label="Light a torch">TORCH</button>
@@ -79,7 +82,8 @@
     (() => {
       const canvas = document.getElementById("zeta_canvas");
       const notice = document.getElementById("notice");
-      const worldFile = window.NativeBridge ? NativeBridge.getWorldFile() : "DEMO.ZZT";
+      const folderWorlds = window.NativeBridge ? JSON.parse(NativeBridge.getWorldFiles() || "[]") : [];
+      const staleWorldFiles = window.NativeBridge ? JSON.parse(NativeBridge.getWorldFilesToPrune() || "[]") : [];
       const counts = new Map();
       const pointers = new Map();
       const legacyKeyCodes = {ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Enter: 13, Escape: 27, Shift: 16, F1: 112};
@@ -155,9 +159,9 @@
         sendKey("Enter", "keyup");
       });
 
-      document.getElementById("load-world").addEventListener("click", () => {
-        if (window.NativeBridge) NativeBridge.openWorldPicker();
-        else tell("World import is available in the Android app.");
+      document.getElementById("world-folder").addEventListener("click", () => {
+        if (window.NativeBridge) NativeBridge.openWorldFolderPicker();
+        else tell("Set the worlds folder from the Android app.");
       });
       canvas.addEventListener("pointerdown", event => event.preventDefault());
       window.addEventListener("blur", () => {
@@ -174,7 +178,71 @@
         showError(message) { tell(message || "ZZT could not start."); }
       };
 
-      ZetaLoad({
+      async function prunePreviousImportedWorlds(names) {
+        const uniqueNames = [...new Set(names.map(name => String(name).toUpperCase()))];
+        let removed = 0;
+        try {
+          const prefix = "zeta_kerry-zzt-android-v1_file_";
+          for (const name of uniqueNames) {
+            const key = prefix + name;
+            if (window.localStorage.getItem(key) !== null) {
+              window.localStorage.removeItem(key);
+              removed++;
+            }
+          }
+        } catch (error) {
+          console.warn("[filesystem] Could not inspect Zeta localStorage world files.", error);
+        }
+
+        if (uniqueNames.length && window.indexedDB) {
+          try {
+            const database = await new Promise((resolve, reject) => {
+              const request = window.indexedDB.open("zeta_kerry-zzt-android-v1", 1);
+              request.onupgradeneeded = event => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains("files")) {
+                  db.createObjectStore("files", {keyPath: "filename"});
+                }
+              };
+              request.onsuccess = () => resolve(request.result);
+              request.onerror = () => reject(request.error || new Error("Could not open Zeta storage."));
+              request.onblocked = () => reject(new Error("Zeta storage is busy."));
+            });
+            if (database.objectStoreNames.contains("files")) {
+              await new Promise((resolve, reject) => {
+                const transaction = database.transaction(["files"], "readwrite");
+                const store = transaction.objectStore("files");
+                uniqueNames.forEach(name => store.delete(name));
+                transaction.oncomplete = resolve;
+                transaction.onerror = () => reject(transaction.error || new Error("Could not prune old world files."));
+                transaction.onabort = () => reject(transaction.error || new Error("World-file cleanup was canceled."));
+              });
+            }
+            database.close();
+          } catch (error) {
+            console.error("[filesystem] Could not remove stale imported worlds from IndexedDB.", error);
+            throw error;
+          }
+        }
+        console.log(`[filesystem] checked ${uniqueNames.length} prior import name(s); removed ${removed} localStorage file(s).`);
+      }
+
+      async function startGame() {
+        const files = [
+          {type: "file", url: "./files/ZZT.EXE", filename: "ZZT.EXE"},
+          {type: "file", url: "./files/ZZT.DAT", filename: "ZZT.DAT"},
+          {type: "file", url: "./files/DEMO.ZZT", filename: "DEMO.ZZT"},
+          ...folderWorlds.map(world => {
+            console.log(`[filesystem] importing ${world.sourceName} as DOS file ${world.dosName} (${world.bytes} bytes).`);
+            return {
+              type: "file",
+              url: "./worlds/" + encodeURIComponent(world.sourceName),
+              filename: world.dosName
+            };
+          })
+        ];
+
+        ZetaLoad({
         render: {
           canvas,
           style: "1991"
@@ -184,25 +252,39 @@
           database: "kerry-zzt-android-v1"
         },
         path: "./",
-        arg: worldFile,
+        arg: "DEMO.ZZT",
         engine: {skip_kc: true},
         audio: {volume: 0.2},
-        files: [
-          {type: "file", url: "./files/ZZT.EXE", filename: "ZZT.EXE"},
-          {type: "file", url: "./files/ZZT.DAT", filename: "ZZT.DAT"},
-          {type: "file", url: "./files/" + worldFile, filename: worldFile}
-        ]
-      }, (instance, error) => {
-        if (instance) {
-          window.zetaInstance = instance;
-          canvas.contentEditable = "false";
-          canvas.setAttribute("inputmode", "none");
-          canvas.blur();
-        } else if (error) {
-          console.error(error);
-          tell("The game engine could not start.");
-        }
-      });
+        files
+        }, (instance, error) => {
+          if (instance) {
+            const providers = instance.vfs && instance.vfs.providers;
+            if (providers) {
+              const writable = providers.filter(provider => provider.readonly !== true);
+              const readonly = providers.filter(provider => provider.readonly === true);
+              instance.vfs.providers = writable.concat(readonly);
+              const visibleWorlds = instance.vfs.list(name => name.toLowerCase().endsWith(".zzt"));
+              console.log("[filesystem] VFS provider order set to read imported files before persistent copies.");
+              console.log("[filesystem] World files visible in DOS: " + visibleWorlds.join(", "));
+            } else {
+              console.error("[filesystem] Zeta did not expose its VFS providers; stale-file precedence could not be corrected.");
+            }
+            window.zetaInstance = instance;
+            canvas.contentEditable = "false";
+            canvas.setAttribute("inputmode", "none");
+            canvas.blur();
+            const status = window.NativeBridge ? NativeBridge.getFolderStatus() : "";
+            if (status) setTimeout(() => tell(status), 900);
+          } else if (error) {
+            console.error("[filesystem] Zeta failed to start.", error);
+            tell("The game engine could not start: " + (error.message || error));
+          }
+        });
+      }
+
+      prunePreviousImportedWorlds(staleWorldFiles).catch(error => {
+        console.error("[filesystem] Continuing with saved Zeta storage after cleanup failed.", error);
+      }).finally(startGame);
     })();
   </script>
 </body>
