@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#080a0c">
+  <title>ZZT for Android</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Courier New", monospace; --dpad-cell: min(11.7vh, 58px); --dpad-height: min(35.1vh, 174px); }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #080a0c; color: #e0e6e0; }
+    body { user-select: none; -webkit-user-select: none; touch-action: none; }
+    #app { height: 100dvh; min-height: 0; padding: 4px; }
+    button { appearance: none; border: 1px solid #5555ff; border-radius: 5px; background: #0000aa; color: #fff; font: 600 15px "Courier New", monospace; min-height: 52px; padding: 6px 10px; touch-action: none; }
+    button:active, button.pressed { background: #5555ff; border-color: #fff; color: #fff; }
+    button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+    #play-area { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(112px, 18vw) minmax(0, 1fr) minmax(140px, 20vw); gap: 7px; align-items: stretch; }
+    .side { position: relative; min-width: 0; }
+    #screen { min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000; border: 0; }
+    #zeta_canvas { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; aspect-ratio: 640 / 400; image-rendering: pixelated; outline: none; }
+    #dpad { position: absolute; bottom: 5%; left: 50%; transform: translateX(-50%); display: grid; grid-template-columns: repeat(3, var(--dpad-cell)); grid-template-rows: repeat(3, var(--dpad-cell)); gap: 0; }
+    #dpad button { min-width: 0; min-height: 0; padding: 0; border-radius: 0; background: #0000aa; color: #fff; display: grid; place-items: center; }
+    #dpad button:active, #dpad button.pressed { background: #5555ff; border-color: #fff; }
+    #dpad button svg { display: block; width: min(7vh, 34px); height: min(7vh, 34px); fill: #fff; shape-rendering: crispEdges; }
+    #dpad-center { grid-area: 2 / 2; border: 1px solid #5555ff; background: #0000aa; color: #fff; font-size: clamp(10px, 2.4vh, 14px); letter-spacing: -1px; }
+    #right svg { transform: rotate(90deg); } #down svg { transform: rotate(180deg); } #left svg { transform: rotate(270deg); }
+    #up { grid-area: 1 / 2; border-radius: 10px 10px 0 0; } #left { grid-area: 2 / 1; border-radius: 10px 0 0 10px; } #right { grid-area: 2 / 3; border-radius: 0 10px 10px 0; } #down { grid-area: 3 / 2; border-radius: 0 0 10px 10px; }
+    .action-grid { position: absolute; top: 5%; left: 0; right: 0; width: 100%; max-width: 245px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 6px; }
+    .action-grid button { min-width: 0; padding: 6px 3px; font-size: clamp(10px, 1.6vw, 13px); white-space: nowrap; }
+    #torch-zone { position: absolute; bottom: calc(5% + var(--dpad-height) + 12px); left: 0; right: 0; width: 100%; max-width: 245px; margin: 0 auto; }
+    #torch-zone button { width: 100%; }
+    #fire-zone { position: absolute; bottom: 5%; left: 0; right: 0; width: 100%; max-width: 245px; margin: 0 auto; }
+    #fire { width: 100%; height: var(--dpad-height); min-height: 0; }
+    #notice { position: fixed; left: 50%; bottom: 9px; transform: translateX(-50%); max-width: 90vw; padding: 6px 9px; border: 1px solid #536054; border-radius: 3px; background: #111713; color: #d9e3d9; font: 12px "Courier New", monospace; text-align: center; pointer-events: none; opacity: 0; transition: opacity .15s linear; }
+    #notice.visible { opacity: 1; }
+    @media (max-height: 430px) {
+      #app { padding: 3px; }
+      #play-area { grid-template-columns: minmax(124px, 16vw) minmax(0, 1fr) minmax(154px, 19vw); gap: 4px; }
+      button { min-height: 46px; }
+      #dpad { grid-template-columns: repeat(3, var(--dpad-cell)); grid-template-rows: repeat(3, var(--dpad-cell)); }
+      .action-grid { top: 5%; gap: 5px; }
+      .action-grid button { min-height: 52px; font-size: clamp(10px, 1.6vw, 13px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <main id="play-area">
+      <section class="side" aria-label="Directional pad">
+        <div id="dpad">
+          <button id="up" data-keys="ArrowUp" aria-label="Move up"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M24 4 42 22H31v22H17V22H6Z"/></svg></button>
+          <button id="left" data-keys="ArrowLeft" aria-label="Move left"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M24 4 42 22H31v22H17V22H6Z"/></svg></button>
+          <button id="dpad-center" type="button" aria-label="Enter">ENTER</button>
+          <button id="right" data-keys="ArrowRight" aria-label="Move right"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M24 4 42 22H31v22H17V22H6Z"/></svg></button>
+          <button id="down" data-keys="ArrowDown" aria-label="Move down"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M24 4 42 22H31v22H17V22H6Z"/></svg></button>
+        </div>
+      </section>
+      <section id="screen" aria-label="ZZT game screen">
+        <canvas id="zeta_canvas" width="640" height="400" tabindex="-1" inputmode="none" aria-label="ZZT game, IBM PC character graphics"></canvas>
+      </section>
+      <section class="side" aria-label="ZZT controls">
+        <div class="action-grid">
+          <button data-tap="p" aria-label="Start the game">PLAY</button>
+          <button id="load-world" type="button" aria-label="Choose a ZZT world file">LOAD WORLD</button>
+        </div>
+        <div id="torch-zone">
+          <button data-tap="t" aria-label="Light a torch">TORCH</button>
+        </div>
+        <div id="fire-zone">
+          <button id="fire" data-keys="Shift" aria-label="Hold fire modifier, then press a direction">FIRE</button>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="notice" role="status" aria-live="polite"></div>
+
+  <script src="./zeta_loader.js"></script>
+  <script>
+    (() => {
+      const canvas = document.getElementById("zeta_canvas");
+      const notice = document.getElementById("notice");
+      const worldFile = window.NativeBridge ? NativeBridge.getWorldFile() : "DEMO.ZZT";
+      const counts = new Map();
+      const pointers = new Map();
+      const legacyKeyCodes = {ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Enter: 13, Escape: 27, Shift: 16, F1: 112};
+      let noticeTimer;
+
+      function tell(message) {
+        notice.textContent = message;
+        notice.classList.add("visible");
+        clearTimeout(noticeTimer);
+        noticeTimer = setTimeout(() => notice.classList.remove("visible"), 2200);
+      }
+
+      function sendKey(key, type) {
+        const shifted = counts.has("Shift");
+        const event = new KeyboardEvent(type, {
+          key,
+          code: key.length === 1 ? "Key" + key.toUpperCase() : key,
+          keyCode: legacyKeyCodes[key] || 0,
+          which: legacyKeyCodes[key] || 0,
+          shiftKey: shifted,
+          bubbles: true,
+          cancelable: true
+        });
+        canvas.dispatchEvent(event);
+      }
+
+      function hold(key) {
+        const count = counts.get(key) || 0;
+        counts.set(key, count + 1);
+        if (count === 0) sendKey(key, "keydown");
+      }
+
+      function release(key) {
+        const count = counts.get(key) || 0;
+        if (count <= 1) {
+          counts.delete(key);
+          if (count === 1) sendKey(key, "keyup");
+        } else {
+          counts.set(key, count - 1);
+        }
+      }
+
+      function keyList(button) {
+        return (button.dataset.keys || button.dataset.tap || "").split("+").filter(Boolean);
+      }
+
+      document.querySelectorAll("button[data-keys], button[data-tap]").forEach(button => {
+        button.addEventListener("pointerdown", event => {
+          event.preventDefault();
+          if (pointers.has(event.pointerId)) return;
+          const keys = keyList(button);
+          pointers.set(event.pointerId, {button, keys});
+          button.classList.add("pressed");
+          try { button.setPointerCapture(event.pointerId); } catch (_) { }
+          keys.forEach(hold);
+        });
+
+        const stopPointer = event => {
+          const held = pointers.get(event.pointerId);
+          if (!held) return;
+          pointers.delete(event.pointerId);
+          held.keys.slice().reverse().forEach(release);
+          held.button.classList.remove("pressed");
+        };
+        button.addEventListener("pointerup", stopPointer);
+        button.addEventListener("pointercancel", stopPointer);
+        button.addEventListener("lostpointercapture", stopPointer);
+      });
+
+      document.getElementById("dpad-center").addEventListener("click", event => {
+        event.preventDefault();
+        sendKey("Enter", "keydown");
+        sendKey("Enter", "keyup");
+      });
+
+      document.getElementById("load-world").addEventListener("click", () => {
+        if (window.NativeBridge) NativeBridge.openWorldPicker();
+        else tell("World import is available in the Android app.");
+      });
+      canvas.addEventListener("pointerdown", event => event.preventDefault());
+      window.addEventListener("blur", () => {
+        for (const [pointerId, held] of pointers) {
+          held.keys.slice().reverse().forEach(release);
+          held.button.classList.remove("pressed");
+          pointers.delete(pointerId);
+        }
+      });
+      window.addEventListener("contextmenu", event => event.preventDefault());
+
+      window.ZZTControls = {
+        back() { hold("Escape"); release("Escape"); },
+        showError(message) { tell(message || "ZZT could not start."); }
+      };
+
+      ZetaLoad({
+        render: {
+          canvas,
+          style: "1991"
+        },
+        storage: {
+          type: "auto",
+          database: "kerry-zzt-android-v1"
+        },
+        path: "./",
+        arg: worldFile,
+        engine: {skip_kc: true},
+        audio: {volume: 0.2},
+        files: [
+          {type: "file", url: "./files/ZZT.EXE", filename: "ZZT.EXE"},
+          {type: "file", url: "./files/ZZT.DAT", filename: "ZZT.DAT"},
+          {type: "file", url: "./files/" + worldFile, filename: worldFile}
+        ]
+      }, (instance, error) => {
+        if (instance) {
+          window.zetaInstance = instance;
+          canvas.contentEditable = "false";
+          canvas.setAttribute("inputmode", "none");
+          canvas.blur();
+        } else if (error) {
+          console.error(error);
+          tell("The game engine could not start.");
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
